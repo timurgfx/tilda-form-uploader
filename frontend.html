@@ -1,0 +1,191 @@
+<!-- frontend.html
+Place this code into Tilda Zero Block -> Add HTML.
+Replace BACKEND_URL_HERE with your Render backend URL, e.g. https://your-app.onrender.com
+-->
+<!-- BEGIN: Upload Widget -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap">
+<style>
+  :root{--bg:#f5f9f6;--green:#2f8b57;--muted:#7b7b7b}
+  .upload-page{font-family:Inter,system-ui,Arial; background:var(--bg); padding:48px 20px; display:flex; justify-content:center;}
+  .card{width:100%; max-width:920px; background:#fff; border-radius:14px; box-shadow:0 10px 30px rgba(0,0,0,0.06); padding:36px;}
+  .title{font-size:28px; text-align:center; font-weight:800; margin-bottom:4px;}
+  .subtitle{color:var(--muted); text-align:center; margin-bottom:18px;}
+  form.grid{display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-bottom:12px;}
+  .full{grid-column:1/-1;}
+  input[type="text"], input[type="tel"], .drop{width:100%; padding:12px 14px; border-radius:10px; border:1px solid #e9efe9; background:#f6fbf6; font-size:15px; box-sizing:border-box;}
+  .drop{min-height:120px; display:flex; align-items:center; justify-content:center; flex-direction:column; gap:8px; border:2px dashed #2f8b57; cursor:pointer;}
+  .drop.dragover{background:#f0fff5;}
+  .btn{background:var(--green); color:#fff; padding:12px 18px; border-radius:40px; border:none; font-weight:700; font-size:15px; cursor:pointer;}
+  .files-row{display:flex; gap:10px; flex-wrap:wrap; margin-top:10px;}
+  .thumb{width:96px; height:72px; border-radius:8px; overflow:hidden; display:flex; align-items:center; justify-content:center; background:#f6f9f6; border:1px solid #e6efe6; position:relative;}
+  .thumb img{width:100%; height:100%; object-fit:cover;}
+  .thumb .remove{position:absolute; top:4px; right:4px; background:rgba(0,0,0,0.5); color:#fff; border-radius:50%; width:20px; height:20px; display:flex; align-items:center; justify-content:center; font-size:12px; cursor:pointer;}
+  .progress-wrap{width:100%; background:#eef6f0; border-radius:10px; overflow:hidden; height:10px;}
+  .progress-bar{height:100%; width:0%; transition:width .2s linear; background:var(--green);}
+  .note{color:var(--muted); font-size:13px;}
+  @media (max-width:700px){ .grid{grid-template-columns:1fr} }
+</style>
+
+<div class="upload-page">
+  <div class="card" role="region" aria-label="Chiqindi rasmlarini yuklash">
+    <h1 class="title">Chiqindi rasmlarini yuklang</h1>
+    <p class="subtitle">Ism, familya, telefon va rasm(lar). Maks 10 ta, umumiy 100MB</p>
+
+    <form id="uploadForm" novalidate>
+      <div class="grid">
+        <div>
+          <label class="block">Ism</label>
+          <input id="firstName" name="firstName" type="text" placeholder="Ismingiz" required>
+        </div>
+        <div>
+          <label class="block">Familiya</label>
+          <input id="lastName" name="lastName" type="text" placeholder="Familiyangiz" required>
+        </div>
+
+        <div class="full">
+          <label class="block">Telefon raqami</label>
+          <input id="phone" name="phone" type="tel" placeholder="+998 90 123 45 67" required>
+        </div>
+
+        <div class="full">
+          <label class="block">Rasmlar (1–10 ta, maksimal 100MB)</label>
+
+          <div id="dropArea" class="drop" tabindex="0" role="button" aria-label="Fayllarni tanlash yoki bu yerga torting">
+            <div style="font-size:36px;color:#2f8b57;">📷</div>
+            <div class="note">Rasmlarni bu yerga tashlang yoki tanlash uchun bosing</div>
+            <input id="fileInput" type="file" name="images" accept="image/*" capture="environment" multiple style="display:none;">
+          </div>
+
+          <div style="margin-top:12px;">
+            <div class="files-row" id="previews"></div>
+          </div>
+
+        </div>
+
+      </div>
+
+      <div style="display:flex; gap:12px; align-items:center; margin-top:14px;">
+        <button class="btn" type="submit">📤 Yuborish</button>
+        <div style="flex:1;">
+          <div class="progress-wrap" aria-hidden="true">
+            <div id="progress" class="progress-bar" style="width:0%"></div>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top:10px;">
+        <div id="message" class="note" role="status" aria-live="polite"></div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+const BACKEND_URL = "BACKEND_URL_HERE"; // <<< REPLACE with your Render backend URL, e.g. https://your-app.onrender.com
+const dropArea = document.getElementById('dropArea');
+const fileInput = document.getElementById('fileInput');
+const previews = document.getElementById('previews');
+const message = document.getElementById('message');
+const progressBar = document.getElementById('progress');
+
+const maxFiles = 10;
+const maxTotalBytes = 100 * 1024 * 1024;
+let files = [];
+
+function humanSize(bytes){
+  if(bytes < 1024) return bytes + ' B';
+  if(bytes < 1024*1024) return (bytes/1024).toFixed(1) + ' KB';
+  return (bytes/1024/1024).toFixed(2) + ' MB';
+}
+
+function renderPreviews(){
+  previews.innerHTML = '';
+  files.forEach((f, idx) => {
+    const div = document.createElement('div'); div.className='thumb';
+    const img = document.createElement('img');
+    img.alt = f.name;
+    const reader = new FileReader();
+    reader.onload = e => img.src = e.target.result;
+    reader.readAsDataURL(f);
+    const rm = document.createElement('div'); rm.className='remove'; rm.innerText='✕';
+    rm.title = 'Oʻchirish';
+    rm.onclick = ()=>{ files.splice(idx,1); renderPreviews(); }
+    div.appendChild(img); div.appendChild(rm);
+    previews.appendChild(div);
+  });
+}
+
+dropArea.addEventListener('click', ()=> fileInput.click());
+dropArea.addEventListener('keydown', (e)=>{ if(e.key==='Enter' || e.key===' ') fileInput.click(); });
+dropArea.addEventListener('dragover', (e)=>{ e.preventDefault(); dropArea.classList.add('dragover'); });
+dropArea.addEventListener('dragleave', ()=> dropArea.classList.remove('dragover'));
+dropArea.addEventListener('drop', (e)=>{ e.preventDefault(); dropArea.classList.remove('dragover'); handleFiles(e.dataTransfer.files); });
+fileInput.addEventListener('change', (e)=> handleFiles(e.target.files));
+
+function handleFiles(list){
+  const incoming = Array.from(list);
+  const newFiles = files.concat(incoming);
+  if(newFiles.length > maxFiles){
+    showMessage(`Xato: Maksimal ruxsat etilgan fayl soni ${maxFiles} ta.`, true);
+    return;
+  }
+  const total = newFiles.reduce((s,f)=>s+f.size,0);
+  if(total > maxTotalBytes){
+    showMessage(`Xato: Fayllarning umumiy hajmi ${humanSize(total)} boʻlib, maksimal ${humanSize(maxTotalBytes)} dan oshib ketdi.`, true);
+    return;
+  }
+  files = newFiles;
+  renderPreviews();
+  showMessage(`${files.length} ta fayl tanlandi, umumiy hajmi ${humanSize(files.reduce((s,f)=>s+f.size,0))}.`);
+}
+
+function showMessage(txt, isError=false){
+  message.style.color = isError ? '#9b2c2c' : '#2e7d32';
+  message.textContent = txt;
+}
+
+document.getElementById('uploadForm').addEventListener('submit', async (e)=>{
+  e.preventDefault();
+  const firstName = document.getElementById('firstName').value.trim();
+  const lastName = document.getElementById('lastName').value.trim();
+  const phone = document.getElementById('phone').value.trim();
+  if(!firstName || !lastName || !phone){ showMessage('Iltimos, barcha maydonlarni toʻldiring.', true); return; }
+  if(files.length === 0){ showMessage('Iltimos, kamida 1 ta rasm tanlang.', true); return; }
+
+  const fd = new FormData();
+  fd.append('firstName', firstName);
+  fd.append('lastName', lastName);
+  fd.append('phone', phone);
+  files.forEach((f, i)=> fd.append('images', f, f.name));
+
+  try{
+    showMessage('Yuklanmoqda... Iltimos kuting');
+    progressBar.style.width = '3%';
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', BACKEND_URL + '/upload', true);
+    xhr.responseType = 'json';
+    xhr.upload.onprogress = (ev)=>{
+      if(ev.lengthComputable){
+        const pct = Math.round((ev.loaded/ev.total) * 100);
+        progressBar.style.width = pct + '%';
+      }
+    };
+    xhr.onload = ()=>{
+      if(xhr.status === 200 && xhr.response && xhr.response.success){
+        progressBar.style.width = '100%';
+        showMessage('Yuklash muvaffaqiyatli bajarildi. Rahmat!');
+        files = []; renderPreviews();
+        document.getElementById('uploadForm').reset();
+      } else {
+        const msg = xhr.response && xhr.response.error ? xhr.response.error : `Server xatosi. Status: ${xhr.status}`;
+        showMessage('Xato: ' + msg, true);
+      }
+    };
+    xhr.onerror = ()=> showMessage('Tarmoq xatosi: soʻrov yuborilmadi. Internetga ulanishingizni tekshiring.', true);
+    xhr.send(fd);
+  }catch(err){
+    showMessage('Kutilmagan xato: ' + (err.message||err), true);
+  }
+});
+</script>
+<!-- END: Upload Widget -->
